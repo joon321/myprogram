@@ -9,10 +9,9 @@ source = 'c:\\backup'
 """FIXED Lists"""
 FLists = [".log", ".conf"]
 OLists = []
-length = len(FLists)
 
 def EXType(file):
-	for i in range(length):
+	for i in range(len(FLists)):
 		if file.endswith(FLists[i]):
 			return True
 
