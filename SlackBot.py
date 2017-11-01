@@ -5,12 +5,10 @@ from slackclient import SlackClient
 
 # testbot's ID as an environment variable
 BOT_ID = os.environ.get("BOT_ID")
-Time = int(time.time())
 
 # constants
 # AT_BOT = "<@" + BOT_ID + ">"
 REQUEST_COMMAND = ['create case', 'escalate case', 'update case']
-
 
 # instantiate Slack & Twilio clients
 slack_client = SlackClient(os.environ.get('SLACK_BOT_TOKEN'))
@@ -29,7 +27,7 @@ def is_user_in_list(u):
 	length = len(history)
 	for i in range(length):
 		if history[i]['user'] == u:
-			return True
+			return i, True
 
 
 def del_user(u):
@@ -39,41 +37,64 @@ def del_user(u):
 			del history[i]
 
 
-def past_seconds(t):
+def get_user_name(user_id):
+	api_call = slack_client.api_call("users.list")
+	if api_call.get('ok'):
+		users = api_call.get('members')
+		for user in users:
+			if 'name' in user and user.get('id') == user_id:
+				return user['name']
+	else:
+		return user_id
+
+
+def past_seconds(user, t):
 	"""
 	t value is time in seconds
 	"""
-	for i, j in enumerate(history):
-		if int(history[i]['time']) + t < Time:
+	epoch = int(time.time())
+
+	if is_user_in_list(user):
+		index = is_user_in_list(user)
+		print(int(history[index[0]]['time']) + 300, epoch)
+		if int(history[index[0]]['time']) + t < epoch:
 			return True
+
+
+def submit_api_sf():
+	pass
 
 
 def send_message(response, channel):
 	slack_client.api_call("chat.postMessage", channel=channel, text=response, as_user=True)
 
 
-def handle_response(command, channel):
+def handle_response(command, channel, user):
 	"""
 		Receives commands directed at the bot and determines if they
 		are valid commands. If so, then acts on the commands. If not,
 		returns back what it needs for clarification.
 	"""
 
-	init_response = "Ok, create case.\n " \
-				    "Enter data\n" \
-				    "Customer: <account name> <Alt+Enter>\n" \
-				    "Description: <UI not working>"
-
 	if REQUEST_COMMAND[0] in command and not is_user_in_list(user):
 		append_history({'time': ts[0:10], '__SESSION__': "initiated", 'user': user})
-		send_message(init_response, channel)
+		user_name = get_user_name(user)
+		send_message(user_name + " create case request received.\n" \
+					 "Enter data\n" \
+					 "Customer: <account name> <Alt+Enter>\n" \
+					 "Description: <UI not working>\n"
+					 "To cancel, type <cancel>", channel)
 	elif is_user_in_list(user) and "customer:" in command and "description:" in command:
 		send_message("""add your API code now""", channel)
 		del_user(user)
-	elif is_user_in_list(user) and not past_seconds(300):
-		send_message("Enter data\n"
+	elif is_user_in_list(user) and 'cancel' in command:
+		del_user(user)
+		send_message("""Your create case request canceled""", channel)
+	elif is_user_in_list(user) and not past_seconds(user, 300):
+		user_name = get_user_name(user)
+		send_message("@" + user_name + ", still proceed with creating case?\n"
 					 "Customer: <account name> <Alt+Enter>\n"
-					 "Description: <UI not working>", channel)
+					 "Description: <UI not working>\nTo cancel, type <cancel>", channel)
 
 
 def not_bot(output):
@@ -100,12 +121,15 @@ def parse_slack_output(slack_rtm_output):
 
 if __name__ == "__main__":
 	READ_WEBSOCKET_DELAY = 1 # 1 second delay between reading from firehose
-	if slack_client.rtm_connect():
-		print("TestBot connected and running!")
-		while True:
-			command, channel, ts, user = parse_slack_output(slack_client.rtm_read())
-			if command and channel and ts and user:
-				handle_response(command, channel)
-			time.sleep(READ_WEBSOCKET_DELAY)
-	else:
-		print("Connection failed. Invalid Slack token or bot ID?")
+	try:
+		if slack_client.rtm_connect():
+			print("TestBot connected and running!")
+			while True:
+				command, channel, ts, user = parse_slack_output(slack_client.rtm_read())
+				if command and channel and ts and user:
+					handle_response(command, channel, user)
+				time.sleep(READ_WEBSOCKET_DELAY)
+		else:
+			print("Connection failed. Invalid Slack token or bot ID?")
+	except ConnectionResetError:
+		slack_client.rtm_connect()
