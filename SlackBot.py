@@ -7,7 +7,9 @@ from slackclient import SlackClient
 BOT_ID = os.environ.get("BOT_ID")
 
 # constants
-# AT_BOT = "<@" + BOT_ID + ">"
+AT_BOT = "<@" + BOT_ID + ">"
+
+# command requests
 REQUEST_COMMAND = ['create case', 'escalate case', 'update case']
 
 # instantiate Slack & Twilio clients
@@ -69,6 +71,12 @@ def send_message(response, channel):
 	slack_client.api_call("chat.postMessage", channel=channel, text=response, as_user=True)
 
 
+def handle_help(command, channel):
+	if AT_BOT and 'help' in command:
+		send_message("Hi, I am a bot created by Joon, I can help you create a SF case\n"
+					 "just type <create case> to proceed", channel)
+
+
 def handle_response(command, channel, user):
 	"""
 		Receives commands directed at the bot and determines if they
@@ -127,6 +135,7 @@ if __name__ == "__main__":
 			while True:
 				command, channel, ts, user = parse_slack_output(slack_client.rtm_read())
 				if command and channel and ts and user:
+					handle_help(command, channel)
 					handle_response(command, channel, user)
 				time.sleep(READ_WEBSOCKET_DELAY)
 		else:
